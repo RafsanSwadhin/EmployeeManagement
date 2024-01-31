@@ -1,0 +1,278 @@
+-----------part 1 -----------
+
+___ django-admin startproject MyEmployee
+___ cd .\MyEmployee\
+___ django-admin startapp app
+___ go to settings.py and in "INSTALLED_APPS" write "app"
+___ python manage.py runserver
+
+-----------part 2------------
+
+go to settings.py and add the database like this ,
+
+###
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME":"myemployee",
+        "HOST":"localhost",
+        "PORT":3306,
+        "USER":"root",
+        "PASSWORD":"root",
+
+        }
+    }
+###
+then install mysqlclient
+___ pip install mysqlclient
+___ python manage.py migrate
+___ python manage.py createsuperuser and then create the super user
+
+-------------part 3------------
+
+___pip install djangorestframework
+___ go to settings.py and in "INSTALLED_APP" write "rest_framework"
+___ app/models.py,
+        ###
+        from django.db import models
+
+        class Employee(models.Model):
+            name = models.CharField(max_length=35)
+            email = models.EmailField()
+            password = models.CharField(max_length=33)
+            phone = models.CharField(max_length=15)
+        ###
+___ python manage.py migrate
+___ in app folder create a new file called "serializers.py"
+
+and then ,
+
+###
+from . models import Employee
+from rest_framework import serializers
+
+class EmployeeSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=35)
+    email = serializers.EmailField()
+    password = serializers.CharField(max_length=33)
+    phone = serializers.CharField(max_length=15)
+
+    def create(self, validated_data):
+        return Employee.objects.create(**validated_data)
+
+class UserSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=35)
+    email = serializers.EmailField()
+    password = serializers.CharField(max_length=33)
+
+###
+___app/views.py ,
+###
+#from django.shortcuts import render
+from django.http import JsonResponse
+from . models import Employee
+from . serializers import EmployeeSerializer,UserSerializer
+from django.contrib.auth.models import User
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.parsers import JSONParser
+# Create your views here.
+@csrf_exempt
+def employeelistview(request):
+    if request.method == 'GET':
+        employees = Employee.objects.all()
+        serializer = EmployeeSerializer(employees, many = True)
+        return JsonResponse(serializer.data , safe = False)
+    
+    elif request.method == 'POST':
+        jsondata = JSONParser().parse(request)
+        serializer = EmployeeSerializer(data=jsondata)
+        if serializer.is_valid():
+            serializer.save()
+            return JsonResponse(serializer.data , safe=False)
+        else:
+            return JsonResponse(serializer.errors , safe = False)
+        
+
+def userlistview(request):
+    users = User.objects.all()
+    serializer = UserSerializer(users, many = True)
+    return JsonResponse(serializer.data, safe = False)
+###
+
+----------part 4----------
+pk based operation
+___go to MyEmployee/urls.py and " path('api/employees/<int:pk>', employeeDetailView ), "
+___ app/views.py
+###
+#from django.shortcuts import render
+from django.http import JsonResponse,HttpResponse
+from . models import Employee
+from . serializers import EmployeeSerializer,UserSerializer
+from django.contrib.auth.models import User
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.parsers import JSONParser
+from rest_framework import status
+# Create your views here.
+
+
+@csrf_exempt
+def employeelistview(request):
+    if request.method == 'GET':
+        employees = Employee.objects.all()
+        serializer = EmployeeSerializer(employees, many = True)
+        return JsonResponse(serializer.data , safe = False)
+    
+    elif request.method == 'POST':
+        jsondata = JSONParser().parse(request)
+        serializer = EmployeeSerializer(data=jsondata)
+        if serializer.is_valid():
+            serializer.save()
+            return JsonResponse(serializer.data , safe=False)
+        else:
+            return JsonResponse(serializer.errors , safe = False)
+
+
+
+@csrf_exempt
+def employeeDetailView(request,pk):
+    try:
+        employee = Employee.objects.get(pk=pk)
+    except Employee.DoesNotExist:
+        return HttpResponse("Invalid pk",status = 404)
+    
+    if request.method =="DELETE":
+        employee.delete()
+        return HttpResponse(status =status.HTTP_204_NO_CONTENT)
+    
+
+    elif request.method == "GET":
+        serializer = EmployeeSerializer(employee)
+        return JsonResponse(serializer.data, safe = False)
+    
+
+    elif request.method == "PUT":
+        jsondata = JSONParser().parse(request)
+        serializer = EmployeeSerializer(employee, data=jsondata)
+        if serializer.is_valid():
+            serializer.save()
+            return JsonResponse(serializer.data , safe=False)
+        else:
+            return JsonResponse(serializer.errors , safe = False)
+
+
+
+def userlistview(request):
+    users = User.objects.all()
+    serializer = UserSerializer(users, many = True)
+    return JsonResponse(serializer.data, safe = False)
+###
+___ app/serializers.py 
+###
+from . models import Employee
+from rest_framework import serializers
+
+class EmployeeSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=35)
+    email = serializers.EmailField()
+    password = serializers.CharField(max_length=33)
+    phone = serializers.CharField(max_length=15)
+
+    def create(self, validated_data):
+        return Employee.objects.create(**validated_data)
+    
+    def update(self, employee, validated_data):
+        newEmployee  = Employee(**validated_data)
+        newEmployee.id = employee.id
+        newEmployee.save()
+        return newEmployee
+
+class UserSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=35)
+    email = serializers.EmailField()
+    password = serializers.CharField(max_length=33)
+###
+
+-------part 5-------
+api_view decorator
+___ app/views.py
+### 
+from django.shortcuts import render
+from . models import Employee
+from django.http import JsonResponse
+from . serializers import EmployeeSerializer,UserSerializer
+from django.contrib.auth.models import User
+from rest_framework import status
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+# Create your views here.
+
+
+@api_view(['GET','POST'])
+def employeelistview(request):
+    if request.method == 'GET':
+        employees = Employee.objects.all()
+        serializer = EmployeeSerializer(employees, many = True)
+        return Response(serializer.data)
+    
+    elif request.method == 'POST':
+        serializer = EmployeeSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        else:
+            return Response(serializer.errors)
+
+
+@api_view(['DELETE','GET','POST'])
+def employeeDetailView(request,pk):
+    try:
+        employee = Employee.objects.get(pk=pk)
+    except Employee.DoesNotExist:
+        return Response("Invalid pk",status = 404)
+    
+    if request.method =="DELETE":
+        employee.delete()
+        return Response(status =status.HTTP_204_NO_CONTENT)
+    
+
+    elif request.method == "GET":
+        serializer = EmployeeSerializer(employee)
+        return Response(serializer.data)
+    
+
+    elif request.method == "PUT":
+        serializer = EmployeeSerializer(employee, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data )
+        else:
+            return Response(serializer.errors )
+
+
+@api_view(['GET'])
+def userlistview(request):
+    if request.method == 'GET':
+        users = User.objects.all()
+        serializer = UserSerializer(users, many = True)
+        return Response(serializer.data)
+###
+
+
+--------part 6------
+model serializer
+____app/serializers.py
+###
+from . models import Employee
+from rest_framework import serializers
+from django.contrib.auth.models import User
+
+class EmployeeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields = '__all__'
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = '__all__'
+###
